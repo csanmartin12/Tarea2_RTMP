@@ -12,7 +12,6 @@
 * [Estado del proyecto](#estado-del-proyecto)
 * [Mejoras pendientes](#mejoras-pendientes)
 * [Agradecimientos](#agradecimientos)
-* [Contacto](#contacto)
 
 
 ## Información general
