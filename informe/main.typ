@@ -8,9 +8,9 @@
   informe-nombre: "Protocolo RTMP: Node-Media-Server y VLC",
   informe-num: "Tarea 2",
   integrantes: "Cristian San Martín",
-  profesor: "...", // TODO
+  profesor: "Jonas Peñailillo", // TODO
   ayudantes: "No",
-  fecha: "Noviembre de 2026",
+  fecha: "10 de Noviembre de 2026",
 )
 
 #show: rest => udp-template(rest)
@@ -26,7 +26,7 @@
 
 // Bloques de código y listados de consola
 #show raw.where(block: true): set text(size: 8pt)
-#show raw.where(block: true): block.with(fill: luma(246), inset: 8pt, radius: 3pt, width: 100%)
+#show raw.where(block: true): it => block(fill: luma(246), inset: 8pt, radius: 3pt, width: 100%, align(left, it))
 
 // ================================================================
 // ÍNDICES
@@ -117,7 +117,7 @@ En la práctica, el cliente envía C0+C1 juntos, el servidor responde S0+S1+S2 e
 
 $ "C0+C1" = 1 + 1536 = 1537 "B", quad "S0+S1+S2" = 1 + 1536 + 1536 = 3073 "B", quad "C2" = 1536 "B" $
 
-Existe además un _handshake_ "complejo" (no documentado por Adobe) en que C1/S1 llevan un resumen HMAC-SHA256; Node-Media-Server acepta ambos.
+Existe además un _handshake_ "complejo" (no documentado por Adobe) en que C1/S1 llevan un resumen HMAC-SHA256. Node-Media-Server acepta ambos.
 
 === Chunks y cabeceras
 
@@ -132,9 +132,9 @@ Cada _mensaje_ RTMP (un fotograma de video, un comando, etc.) se fragmenta en _c
     align: (center + horizon, center + horizon, left + horizon),
     [*fmt*], [*Largo*], [*Campos incluidos*],
     [0], [11 bytes], [timestamp absoluto (3), largo del mensaje (3), _type id_ (1), _message stream id_ (4, _little-endian_)],
-    [1], [7 bytes], [delta de timestamp (3), largo (3), _type id_ (1); reutiliza el stream id],
-    [2], [3 bytes], [sólo delta de timestamp; reutiliza largo, tipo y stream id],
-    [3], [0 bytes], [nada; continuación de un mensaje o repetición exacta del anterior],
+    [1], [7 bytes], [delta de timestamp (3), largo (3), _type id_ (1). Reutiliza el stream id],
+    [2], [3 bytes], [sólo delta de timestamp. Reutiliza largo, tipo y stream id],
+    [3], [0 bytes], [ninguno. Continuación de un mensaje o repetición exacta del anterior],
   ),
   caption: [Tipos de cabecera de mensaje RTMP (Adobe Systems, 2012)],
 ) <tab-fmt>
@@ -161,7 +161,7 @@ El campo _type id_ indica qué transporta el mensaje. Los relevantes para esta t
   caption: [Tipos de mensaje RTMP observables],
 ) <tab-tipos>
 
-Los comandos se serializan en AMF0 (_Action Message Format_), un formato binario en que cada valor va precedido de un byte de tipo: `0x00` número (double de 8 bytes), `0x01` booleano, `0x02` cadena, `0x03` objeto, `0x05` nulo, `0x08` arreglo ECMA y `0x09` fin de objeto (Adobe Systems, 2007). Cada comando lleva su nombre, un _transaction id_ y un objeto de argumentos; el servidor responde con `_result`/`_error` (mismo transaction id) o con eventos `onStatus`.
+Los comandos se serializan en AMF0 (_Action Message Format_), un formato binario en que cada valor va precedido de un byte de tipo: `0x00` número (double de 8 bytes), `0x01` booleano, `0x02` cadena, `0x03` objeto, `0x05` nulo, `0x08` arreglo ECMA y `0x09` fin de objeto (Adobe Systems, 2007). Cada comando lleva su nombre, un _transaction id_ y un objeto de argumentos. El servidor responde con `_result`/`_error` (mismo transaction id) o con eventos `onStatus`.
 
 En los mensajes de audio y video, el primer byte es la cabecera de la etiqueta FLV (Adobe Systems, 2010). En video, los 4 bits altos son el tipo de cuadro (1 = _keyframe_, 2 = _inter-frame_) y los 4 bajos el códec (7 = AVC/H.264), seguido de un `AVCPacketType` (0 = _sequence header_ con la configuración del decodificador, 1 = unidades NAL). En audio, los 4 bits altos indican el formato (10 = AAC) y el resto la frecuencia, resolución y canales.
 
@@ -176,11 +176,11 @@ A partir de la especificación, para una publicación seguida de una reproducci�
 
 En régimen permanente el tráfico debería ser casi unidireccional (publicador → servidor → reproductor), con una tasa cercana a la suma de las tasas de audio y video del archivo y con una cadencia regular. Para el video de prueba (25 fps, audio AAC a 44,1 kHz con 1024 muestras por cuadro), los intervalos esperados entre mensajes son:
 
-$ T_"video" = frac(1, 25 "fps") = 40 "ms", quad T_"audio" = frac(1024, 44100 "Hz") = 23.2 "ms" $
+$ T_"video" = frac(1, 25 "fps") = 40 "ms", quad T_"audio" = frac(1024, 44100 "Hz") = 23,2 "ms" $
 
 #figure(
   image("secuencia.png", width: 82%),
-  caption: [Diagrama de secuencia esperado para publicación y reproducción RTMP (elaboración propia)],
+  caption: [Diagrama de secuencia esperado para publicación y reproducción RTMP],
 ) <fig-secuencia>
 
 // ================================================================
@@ -229,9 +229,9 @@ cvlc -I dummy /media/muestra.mp4 \
   --sout '#std{access=avio,mux=ffmpeg{mux=flv},dst=rtmp://nms:1935/live/test}' vlc://quit
 ```
 
-El video de prueba (`media/muestra.mp4`) es un patrón de barras generado con FFmpeg: 640×360 a 25 fps, H.264 con un _keyframe_ cada 50 cuadros (2 s) y un tono de 440 Hz en AAC a 44,1 kHz; dura 180 s. Según `ffprobe`, las tasas reales del archivo son 500,2 kbit/s de video y 96,3 kbit/s de audio:
+El video de prueba (`media/muestra.mp4`) es un patrón de barras generado con FFmpeg: 640×360 a 25 fps, H.264 con un _keyframe_ cada 50 cuadros (2 s) y un tono de 440 Hz en AAC a 44,1 kHz, con una duración de 180 s. Según `ffprobe`, las tasas reales del archivo son 500,2 kbit/s de video y 96,3 kbit/s de audio:
 
-$ R_"archivo" = 500.184 + 96.278 = 596.462 "kbit/s" $
+$ R_"archivo" = 500,184 + 96,278 = 596,462 "kbit/s" $
 
 === VLC como reproductor
 
@@ -245,10 +245,10 @@ docker compose --profile gui up player-gui
 == Uso de los programas
 
 La secuencia de uso fue:
-+ levantar servidor y sniffer (@fig-ps);
-+ lanzar el publicador (`docker compose up publisher`), que transmite los 180 s del archivo;
-+ a los 36 s, abrir el reproductor con ventana;
-+ cerrar VLC cuando terminó la publicación (t = 232 s) y abrirlo una segunda vez (t = 242 s) para repetir la prueba;
++ levantar servidor y sniffer (@fig-ps).
++ lanzar el publicador (`docker compose up publisher`), que transmite los 180 s del archivo.
++ a los 36 s, abrir el reproductor con ventana.
++ cerrar VLC cuando terminó la publicación (t = 232 s) y abrirlo una segunda vez (t = 242 s) para repetir la prueba.
 + detener todo con `docker compose down`.
 
 Las capturas de pantalla de VLC y del panel web se tomaron en una repetición del mismo procedimiento, levantando sólo el servidor (sin el sniffer) para no sobrescribir la captura de tráfico analizada en la sección siguiente.
@@ -293,7 +293,7 @@ Las tramas de las tres conexiones suman el total de la captura:
 
 $ 29141 + 19033 + 30 = 48204 "tramas" $
 
-La asimetría es la esperada: el publicador sube 14 MB y recibe sólo 872 kB, que son casi exclusivamente ACK de TCP; el reproductor recibe 11 MB y envía 616 kB. De hecho, la trama más frecuente de la captura mide 66 bytes (22 297 tramas): son ACK de TCP sin carga útil.
+La asimetría es la esperada: el publicador sube 14 MB y recibe sólo 872 kB, que son casi exclusivamente ACK de TCP, mientras que el reproductor recibe 11 MB y envía 616 kB. De hecho, la trama más frecuente de la captura mide 66 bytes (22 297 tramas): son ACK de TCP sin carga útil.
 
 === Establecimiento de la sesión de publicación
 
@@ -366,16 +366,16 @@ Como ambas conexiones recorren la misma red virtual, la diferencia no se debe a 
 
 En el `connect()` (@fig-ws-connect) se ve la cabecera de chunk completa (`Format: 0`, 11 bytes), el _chunk stream_ 3, el tipo `0x14` (comando AMF0) y un cuerpo de 133 bytes. El objeto AMF0 trae `app = 'live'`, `type = 'nonprivate'`, `tcUrl = 'rtmp://nms:1935/live'` (con el nombre DNS del contenedor del servidor) y `flashVer = 'FMLE/3.0 (compatible; Lavf59.27.100)'`. Esta última cadena revela que, aunque el programa sea VLC, quien realmente habla RTMP es `libavformat` (Lavf) de FFmpeg 5.1, la versión incluida en Debian 12, que se presenta como _Flash Media Live Encoder_. Lo mismo ocurre con el reproductor, que envía `flashVer = 'LNX 9,0,124,2'`, el valor por defecto de FFmpeg en modo reproducción.
 
-El servidor responde con `_result('NetConnection.Connect.Success')` y, en las tramas 14 y 16, impone sus parámetros: ventana de _acknowledgement_ de 5 000 000 bytes, _peer bandwidth_ dinámico de 5 000 000 bytes y un _chunk size_ de 65 535 bytes, muy por encima de los 128 bytes por defecto. El publicador fija también 65 535 bytes y envía `releaseStream` y `FCPublish`, que no forman parte de la especificación de Adobe sino que son una convención heredada de FMLE; luego `createStream`, que recibe el id de flujo 1, y `publish('test')`.
+El servidor responde con `_result('NetConnection.Connect.Success')` y, en las tramas 14 y 16, impone sus parámetros: ventana de _acknowledgement_ de 5 000 000 bytes, _peer bandwidth_ dinámico de 5 000 000 bytes y un _chunk size_ de 65 535 bytes, muy por encima de los 128 bytes por defecto. El publicador fija también 65 535 bytes y envía `releaseStream` y `FCPublish`, que no forman parte de la especificación de Adobe sino que son una convención heredada de FMLE. Luego envía `createStream`, que recibe el id de flujo 1, y `publish('test')`.
 
 #figure(
   image("captura_onstatus.png", width: 100%),
   caption: [Detalle de la respuesta `onStatus('NetStream.Publish.Start')` del servidor (trama 27)],
 ) <fig-ws-onstatus>
 
-La respuesta `onStatus` (@fig-ws-onstatus) ya viaja en el _message stream_ 1 creado por `createStream`, y su cuerpo de 117 bytes contiene, en orden, cada uno de los tipos AMF0 descritos en la @tab-tipos: una cadena (`0x02`, `'onStatus'`), un número (`0x00`, _transaction id_ 0), un nulo (`0x05`) y un objeto (`0x03`) con `level = 'status'`, `code = 'NetStream.Publish.Start'` y `description = '/live/test is now published.'`.
+La respuesta `onStatus` (@fig-ws-onstatus) ya viaja en el _message stream_ 1 creado por `createStream`, y su cuerpo de 117 bytes contiene, en orden, cada uno de los tipos AMF0 descritos en el marco teórico: una cadena (`0x02`, `'onStatus'`), un número (`0x00`, _transaction id_ 0), un nulo (`0x05`) y un objeto (`0x03`) con `level = 'status'`, `code = 'NetStream.Publish.Start'` y `description = '/live/test is now published.'`.
 
-Entre varios comandos se repiten pausas de unos 40 ms (tramas 14→16: $107.044 - 67.446 = 39.598$ ms; 16→20: $148.007 - 107.044 = 40.963$ ms; 22→25: $189.034 - 148.751 = 40.283$ ms). Coinciden con el temporizador de _delayed ACK_ de TCP en Linux combinado con el algoritmo de Nagle, ya que `libavformat` abre el socket sin `TCP_NODELAY`. El efecto es que la publicación queda confirmada recién a los 189,7 ms, aunque los mensajes en sí tardan menos de 1 ms en cruzar la red.
+Entre varios comandos se repiten pausas de unos 40 ms (tramas 14→16: $107.044 - 67.446 = 39.598$ ms, 16→20: $148.007 - 107.044 = 40.963$ ms y 22→25: $189.034 - 148.751 = 40.283$ ms). Coinciden con el temporizador de _delayed ACK_ de TCP en Linux combinado con el algoritmo de Nagle, ya que `libavformat` abre el socket sin `TCP_NODELAY`. El efecto es que la publicación queda confirmada recién a los 189,7 ms, aunque los mensajes en sí tardan menos de 1 ms en cruzar la red.
 
 === Envío de medios
 
@@ -397,7 +397,7 @@ $ 3602 - 3570 = 32 "cuadros" = 32/25 = 1.28 "s de video" $
 
 $ 6201 - 6150 = 51 "cuadros" = 51/43.066 = 1.18 "s de audio" $
 
-corresponde a la caché de GOP que el servidor entrega al conectarse el reproductor (ver Sesión de reproducción).
+corresponde a la caché de GOP que el servidor entrega al conectarse el reproductor (@sec-reproduccion).
 
 #figure(
   table(
@@ -416,7 +416,7 @@ corresponde a la caché de GOP que el servidor entrega al conectarse el reproduc
   caption: [Mensajes y cabeceras por sentido de transmisión (captura propia)],
 ) <tab-conteo>
 
-Un hallazgo interesante de la @tab-conteo es que cada implementación usa la compresión de cabeceras de forma distinta. El publicador (`libavformat`) usa el formato 1, de 7 bytes, para casi todos los mensajes, porque cada _chunk stream_ transporta siempre el mismo tipo de mensaje y basta con el delta de tiempo y el largo. Node-Media-Server, en cambio, envía *siempre* cabeceras completas (fmt 0, 11 bytes) hacia el reproductor. Ambos comportamientos son válidos según la especificación; con unos 9 800 mensajes de audio y video reenviados, el sobrecosto del servidor es:
+Un hallazgo interesante de la @tab-conteo es que cada implementación usa la compresión de cabeceras de forma distinta. El publicador (`libavformat`) usa el formato 1, de 7 bytes, para casi todos los mensajes, porque cada _chunk stream_ transporta siempre el mismo tipo de mensaje y basta con el delta de tiempo y el largo. Node-Media-Server, en cambio, envía *siempre* cabeceras completas (fmt 0, 11 bytes) hacia el reproductor. Ambos comportamientos son válidos según la especificación. Con unos 9 800 mensajes de audio y video reenviados, el sobrecosto del servidor es:
 
 $ (11 - 7) "B" times (6201 + 3602) = 4 times 9803 = 39212 "B" approx 39 "kB" $
 
@@ -426,15 +426,15 @@ apenas un 0,36 % de los 11 MB enviados al reproductor.
 
 La @fig-throughput muestra la carga útil TCP por segundo en cada sentido. La tasa media se calculó en la misma ventana estable para ambos sentidos (segundos 38 a 177, 140 s):
 
-$ overline(R)_"pub" = frac(10627311 "B" times 8, 140 "s") = frac(85018488 "bit", 140 "s") = 607275 "bit/s" approx 607.3 "kbit/s" $
+$ overline(R)_"pub" = frac(10627311 "B" times 8, 140 "s") = frac(85018488 "bit", 140 "s") = 607275 "bit/s" approx 607,3 "kbit/s" $
 
-$ overline(R)_"rep" = frac(10727883 "B" times 8, 140 "s") = frac(85823064 "bit", 140 "s") = 613022 "bit/s" approx 613.0 "kbit/s" $
+$ overline(R)_"rep" = frac(10727883 "B" times 8, 140 "s") = frac(85823064 "bit", 140 "s") = 613022 "bit/s" approx 613,0 "kbit/s" $
 
-La tasa del publicador supera en $607.3 - 596.5 = 10.8$ kbit/s a la tasa de medios del archivo. Esa diferencia es el costo del encapsulado: cada cuadro lleva una cabecera de chunk fmt 1 (1 + 7 = 8 bytes) y la cabecera de etiqueta FLV (5 bytes en video, 2 en audio):
+La tasa del publicador supera en $607,3 - 596,5 = 10,8$ kbit/s a la tasa de medios del archivo. Esa diferencia es el costo del encapsulado: cada cuadro lleva una cabecera de chunk fmt 1 (1 + 7 = 8 bytes) y la cabecera de etiqueta FLV (5 bytes en video, 2 en audio):
 
-$ 25 times (8 + 5) + 43.066 times (8 + 2) = 325 + 430.7 = 755.7 "B/s" = 6.0 "kbit/s" $
+$ 25 times (8 + 5) + 43,066 times (8 + 2) = 325 + 430,7 = 755,7 "B/s" = 6,0 "kbit/s" $
 
-lo que explica más de la mitad de la diferencia; el resto proviene de que la tasa media del archivo se calcula sobre los 180 s y no sobre la ventana medida. La bajada hacia el reproductor es 5,7 kbit/s mayor que la subida; de eso, unos 2,2 kbit/s se explican por las cabeceras completas del servidor ($(25 + 43.066) times 4 "B" times 8 = 2178$ bit/s).
+lo que explica más de la mitad de la diferencia. El resto proviene de que la tasa media del archivo se calcula sobre los 180 s y no sobre la ventana medida. La bajada hacia el reproductor es 5,7 kbit/s mayor que la subida, y de esa diferencia unos 2,2 kbit/s se explican por las cabeceras completas del servidor ($(25 + 43.066) times 4 "B" times 8 = 2178$ bit/s).
 
 #figure(
   image("throughput.png", width: 100%),
@@ -442,14 +442,14 @@ lo que explica más de la mitad de la diferencia; el resto proviene de que la ta
 ) <fig-throughput>
 
 En el gráfico se distinguen:
-- una alternancia regular entre ≈ 570 y ≈ 660 kbit/s, con período de 2 s: el segundo que contiene un _keyframe_ transporta más bytes;
-- un pico de 1353 kbit/s al iniciar la reproducción (t = 36 s), que es la caché de GOP;
-- una caída a ≈ 130 kbit/s en t = 59 s seguida de un pico de ≈ 1060 kbit/s en t = 60 s, presente tanto en la subida como en la bajada: el publicador se detuvo cerca de un segundo y luego envió lo acumulado. Como el reproductor replica exactamente el mismo patrón, la pausa se originó en el publicador o en la máquina virtual, no en el servidor;
+- una alternancia regular entre ≈ 570 y ≈ 660 kbit/s, con período de 2 s: el segundo que contiene un _keyframe_ transporta más bytes.
+- un pico de 1353 kbit/s al iniciar la reproducción (t = 36 s), que es la caché de GOP.
+- una caída a ≈ 130 kbit/s en t = 59 s seguida de un pico de ≈ 1060 kbit/s en t = 60 s, presente tanto en la subida como en la bajada: el publicador se detuvo cerca de un segundo y luego envió lo acumulado. Como el reproductor replica exactamente el mismo patrón, la pausa se originó en el publicador o en la máquina virtual, no en el servidor.
 - que la curva del reproductor es una copia de la del publicador, lo que confirma que el servidor reenvía sin recodificar.
 
-=== Sesión de reproducción
+=== Sesión de reproducción <sec-reproduccion>
 
-La sesión del reproductor (tramas 5826–5850) sigue el patrón esperado con algunos detalles propios de VLC/`libavformat`: antes de `play` envía `getStreamLength` (pensado para videos bajo demanda; el servidor no responde porque es un flujo en vivo), llama a `play('test')` y envía el evento de control _Set Buffer Length_ de 3000 ms para indicar cuánto búfer mantendrá.
+La sesión del reproductor (tramas 5826–5850) sigue el patrón esperado con algunos detalles propios de VLC/`libavformat`: antes de `play` envía `getStreamLength` (pensado para videos bajo demanda, por lo que el servidor no responde al tratarse de un flujo en vivo), llama a `play('test')` y envía el evento de control _Set Buffer Length_ de 3000 ms para indicar cuánto búfer mantendrá.
 
 El servidor contesta con _Stream Begin_ (evento de control de usuario 0), dos `onStatus` (`NetStream.Play.Reset` y `NetStream.Play.Start`), `|RtmpSampleAccess` (dos booleanos en falso, herencia de Flash) y los metadatos. Inmediatamente después, en las 18 tramas de los 55 ms siguientes, entrega 103 385 bytes con todos los cuadros acumulados desde el último _keyframe_ (la primera trama de video, la 5850, es un _keyframe_): es la *caché de GOP* de Node-Media-Server, que permite al reproductor mostrar imagen de inmediato en lugar de esperar hasta 2 s al siguiente _keyframe_. Entre el SYN del reproductor y el primer dato de video transcurren:
 
@@ -457,7 +457,7 @@ $ 36.345371 "s" - 36.172162 "s" = 0.173209 "s" approx 173 "ms" $
 
 === Acknowledgement de RTMP
 
-A diferencia de lo esperado en el marco teórico, el mecanismo de _acknowledgement_ propio de RTMP sí aparece, pero sólo en un sentido. El reproductor envía un mensaje _Acknowledgement_ (tipo `0x03`) cada vez que acumula unos 2,5 MB recibidos:
+Según el marco teórico (@tab-tipos), cada receptor debería enviar un _Acknowledgement_ cada vez que recibe _window size_ bytes. En la captura este mecanismo aparece, pero sólo en un sentido. El reproductor envía un mensaje _Acknowledgement_ (tipo `0x03`) cada vez que acumula unos 2,5 MB recibidos:
 
 $ 5003584 - 2501012 = 2502572 "B" \
   7504924 - 5003584 = 2501340 "B" \
@@ -471,32 +471,32 @@ El publicador, al acabar el archivo, envía `FCUnpublish('test')` y `deleteStrea
 
 El reproductor, en cambio, no recibe ningún aviso de fin de flujo: después de t = 179,156 s simplemente deja de recibir datos y queda esperando. La conexión se cierra recién cuando se cierra la ventana de VLC, con un FIN del reproductor en t = 232,363 s (trama 48172), sin enviar `deleteStream`.
 
-Diez segundos después (t = 242,158 s) se volvió a abrir VLC para repetir la prueba, lo que generó una tercera conexión (puerto 47328). Como la publicación ya había terminado, esta conexión permite observar qué hace el servidor ante un `play` sobre un flujo inexistente: completó el handshake y respondió `NetStream.Play.Start` aunque el flujo `/live/test` ya no existía: Node-Media-Server no informa `NetStream.Play.StreamNotFound`, sino que deja al reproductor suscrito a la espera de que alguien vuelva a publicar. La captura termina en ese punto, al detenerse los contenedores.
+Diez segundos después (t = 242,158 s) se volvió a abrir VLC para repetir la prueba, lo que generó una tercera conexión (puerto 47328). Como la publicación ya había terminado, esta conexión permite observar qué hace el servidor ante un `play` sobre un flujo inexistente: completó el handshake y respondió `NetStream.Play.Start` aunque el flujo `/live/test` ya no existía. Es decir, Node-Media-Server no informa `NetStream.Play.StreamNotFound`, sino que deja al reproductor suscrito a la espera de que alguien vuelva a publicar. La captura termina en ese punto, al detenerse los contenedores.
 
 == Suposiciones sobre la modificación del tráfico
 
-A continuación se plantean hipótesis sobre qué ocurriría si un intermediario pudiera modificar campos del tráfico al vuelo. Se verificarán en el capítulo 3 (Tarea 3). Como RTMP viaja sobre TCP, se asume que el atacante recalcula los checksums y respeta los números de secuencia; si no, TCP simplemente descartaría los segmentos y el efecto sería sólo retransmisiones y latencia.
+A continuación se plantean hipótesis sobre qué ocurriría si un intermediario pudiera modificar campos del tráfico al vuelo. Se verificarán en el capítulo 3 (Tarea 3). Como RTMP viaja sobre TCP, se asume que el atacante recalcula los checksums y respeta los números de secuencia. De lo contrario, TCP simplemente descartaría los segmentos y el efecto sería sólo retransmisiones y latencia.
 
 + *Byte de versión C0 distinto de 3.* La especificación indica que el servidor puede rechazar versiones que no reconoce. Se espera que Node-Media-Server cierre la conexión durante el handshake y que VLC informe un error de conexión.
 + *Bytes aleatorios de C1/S1 o el eco de C2/S2.* En el handshake simple ningún extremo verifica realmente el eco, por lo que probablemente no haya efecto. Si se usara el handshake complejo con HMAC, la verificación fallaría y la conexión se cerraría.
 + *Valor de _Set Chunk Size_.* Es el campo más delicado. Si se cambia en un sentido (por ejemplo, 65 535 → 128) el receptor interpretará los límites de chunk en lugares distintos de los que usa el emisor y leerá bytes de video como cabeceras. Se espera desincronización total del flujo y cierre de la sesión, el mismo fenómeno que sufrió Wireshark al usar un tamaño máximo incorrecto.
 + *Campo `fmt` o _Chunk Stream ID_.* Cambiar `fmt` altera el largo de la cabecera que el receptor espera leer, con el mismo efecto de desincronización. Cambiar el csid haría que el receptor asocie el chunk al estado de otro flujo lógico (por ejemplo, aplicar el delta de audio a un cuadro de video), lo que produciría marcas de tiempo erróneas.
-+ *Largo del mensaje.* Si se aumenta, el receptor esperará bytes que nunca llegan y consumirá el inicio del mensaje siguiente; si se disminuye, los bytes sobrantes se interpretarán como una cabecera nueva. En ambos casos se espera corrupción del flujo.
++ *Largo del mensaje.* Si se aumenta, el receptor esperará bytes que nunca llegan y consumirá el inicio del mensaje siguiente. Si se disminuye, los bytes sobrantes se interpretarán como una cabecera nueva. En ambos casos se espera corrupción del flujo.
 + *_Type id_ de 0x09 (video) a 0x08 (audio).* El servidor reenviaría cuadros de video como si fueran audio. En VLC se espera que el decodificador AAC reciba datos inválidos (errores en el log y ruido o silencio) y que el video presente saltos por cuadros faltantes.
 + *Marcas de tiempo (timestamp o delta).* No rompen el _framing_, por lo que la sesión sigue viva, pero VLC sincroniza audio y video según estas marcas: se esperan desfases labio-sonido, cuadros descartados por llegar "tarde" o pausas cuando el tiempo salta hacia adelante.
 + *Cabecera de video `0x17` → `0x27` (_keyframe_ marcado como _inter-frame_).* Node-Media-Server decide qué guardar en la caché de GOP según este bit. Si los _keyframes_ dejan de estar marcados, un reproductor que se conecte tarde no recibiría un cuadro de referencia: se esperan artefactos o pantalla gris hasta que llegue un cuadro decodificable. Alterar el `AVCPacketType` del _sequence header_ (0 → 1) impediría inicializar el decodificador H.264 y no habría video.
-+ *Comandos AMF0.* Cambiar el nombre del flujo en `publish` o en `play` (por ejemplo, `test` → `tesX`) desviaría la publicación a otra clave; el reproductor quedaría esperando un flujo inexistente sin recibir datos. Cambiar el `code` de `onStatus` a `NetStream.Publish.BadName` haría probablemente que el publicador aborte. Romper la estructura AMF (por ejemplo, el byte de tipo `0x02` de una cadena) haría fallar el análisis del comando y el servidor no respondería.
++ *Comandos AMF0.* Cambiar el nombre del flujo en `publish` o en `play` (por ejemplo, `test` → `tesX`) desviaría la publicación a otra clave y el reproductor quedaría esperando un flujo inexistente sin recibir datos. Cambiar el `code` de `onStatus` a `NetStream.Publish.BadName` haría probablemente que el publicador aborte. Romper la estructura AMF (por ejemplo, el byte de tipo `0x02` de una cadena) haría fallar el análisis del comando y el servidor no respondería.
 + *_Window Ack. Size_ o _Set Peer Bandwidth_.* Reducir la ventana a pocos kilobytes obligaría a enviar _Acknowledgements_ con mucha frecuencia, lo que aumentaría el tráfico de control. Con un límite _hard_ bajo, un emisor que respete la especificación debería reducir su tasa, con el consiguiente congelamiento del video en el reproductor.
 
 == Dificultades y Visión Crítica
 
 Durante el desarrollo de la tarea, las principales dificultades fueron:
 
-+ *Publicar con VLC por RTMP*: la interfaz de VLC no ofrece esa opción, por lo que fue necesario construir la cadena `--sout` con el módulo `avio` y el multiplexor FLV de FFmpeg. Un primer intento recodificando el video falló por el formato de color de la fuente; la solución fue generar el video ya en H.264/AAC y sólo remultiplexarlo.
++ *Publicar con VLC por RTMP*: la interfaz de VLC no ofrece esa opción, por lo que fue necesario construir la cadena `--sout` con el módulo `avio` y el multiplexor FLV de FFmpeg. Un primer intento recodificando el video falló por el formato de color de la fuente. La solución fue generar el video ya en H.264/AAC y sólo remultiplexarlo.
 + *Ejecutar VLC en contenedores*: VLC se niega a correr como _root_, por lo que se creó un usuario sin privilegios en la imagen. Para ver el video en pantalla además hay que compartir el servidor gráfico del host (X11 o WSLg).
-+ *Decodificación en Wireshark*: el filtro intuitivo `rtmp` no muestra nada, porque corresponde a otro protocolo; el correcto es `rtmpt`. Además, en Wireshark 4.2 la mayor parte de la captura aparecía como paquetes malformados por el límite de 32 768 bytes del disector, problema que ya no existe en la versión 4.6.
-+ *Permisos de las herramientas*: el archivo de captura lo escribe `tcpdump` como _root_ dentro del contenedor, por lo que hubo que cambiar su dueño (`chown`) en el host; y el perfil AppArmor de `tshark` en Ubuntu le impedía abrir el archivo directamente, lo que se resolvió entregándole la captura por una tubería (`cat captura | tshark -r -`).
-+ *Audio en el contenedor*: VLC reproducía la imagen pero no el sonido, porque el contenedor no tenía acceso al servidor de audio; se resolvió compartiendo el socket de PulseAudio del host.
++ *Decodificación en Wireshark*: el filtro intuitivo `rtmp` no muestra nada, porque corresponde a otro protocolo. El correcto es `rtmpt`. Además, en Wireshark 4.2 la mayor parte de la captura aparecía como paquetes malformados por el límite de 32 768 bytes del disector, problema que ya no existe en la versión 4.6.
++ *Permisos de las herramientas*: el archivo de captura lo escribe `tcpdump` como _root_ dentro del contenedor, por lo que hubo que cambiar su dueño (`chown`) en el host. Además, el perfil AppArmor de `tshark` en Ubuntu le impedía abrir el archivo directamente, lo que se resolvió entregándole la captura por una tubería (`cat captura | tshark -r -`).
++ *Audio en el contenedor*: VLC reproducía la imagen pero no el sonido, porque el contenedor no tenía acceso al servidor de audio. Se resolvió compartiendo el socket de PulseAudio del host.
 
 // ================================================================
 // CONCLUSIONES
@@ -507,7 +507,7 @@ Durante el desarrollo de la tarea, las principales dificultades fueron:
 // TODO: revisar y personalizar (fortalezas, debilidades y experiencia propia)
 El trabajo permitió observar en una red real cómo RTMP cumple su objetivo de multiplexar audio, video y comandos sobre una única conexión TCP. El tráfico capturado coincidió en lo esencial con lo que describe la especificación de Adobe: un handshake de tamaño fijo (1537 + 3073 + 1536 bytes), una fase de negociación con mensajes de control y comandos AMF0 que dura menos de 200 ms, y luego un flujo periódico de mensajes de audio y video cuya cadencia refleja directamente las propiedades del archivo (25 cuadros de video y unos 43 de audio por segundo, un _keyframe_ cada 2 s).
 
-Las diferencias más interesantes no estaban en la especificación, sino en las implementaciones. Se descubrió que VLC delega toda la lógica RTMP en `libavformat` de FFmpeg, que el servidor y el publicador eligen formatos de cabecera distintos para los mismos datos, que existen comandos "de facto" (`releaseStream`, `FCPublish`, `getStreamLength`) ausentes en la norma, y que Node-Media-Server usa una caché de GOP para que un reproductor nuevo vea imagen en unos 200 ms. También se comprobó que el mecanismo de _acknowledgement_ propio de RTMP se usa sólo a medias: el reproductor acusa recibo cada 2,5 MB, pero el servidor nunca lo hace hacia el publicador, de modo que el control de flujo efectivo recae en TCP. Finalmente, el reproductor no recibe aviso alguno cuando termina la publicación, y el servidor acepta un `play` sobre un flujo inexistente sin reportar error.
+Las diferencias más interesantes no estaban en la especificación, sino en las implementaciones. Se descubrió que VLC delega toda la lógica RTMP en `libavformat` de FFmpeg, que el servidor y el publicador eligen formatos de cabecera distintos para los mismos datos, que existen comandos "de facto" (`releaseStream`, `FCPublish`, `getStreamLength`) ausentes en la norma, y que Node-Media-Server usa una caché de GOP para que un reproductor nuevo vea imagen en menos de 200 ms (173 ms en la captura). También se comprobó que el mecanismo de _acknowledgement_ propio de RTMP se usa sólo a medias: el reproductor acusa recibo cada 2,5 MB, pero el servidor nunca lo hace hacia el publicador, de modo que el control de flujo efectivo recae en TCP. Finalmente, el reproductor no recibe aviso alguno cuando termina la publicación, y el servidor acepta un `play` sobre un flujo inexistente sin reportar error.
 
 El problema con el disector de Wireshark fue la lección más útil: un único parámetro de _framing_ mal interpretado (el tamaño máximo de chunk) basta para que todo el flujo se lea como basura. Esto anticipa que, de los campos que se modificarán en la Tarea 3, los que afectan la delimitación de mensajes (_chunk size_, `fmt`, largo) tendrán efectos mucho más graves que los que sólo alteran el contenido (marcas de tiempo, datos de audio o video).
 
@@ -520,7 +520,7 @@ Como fortaleza destaco haber automatizado el despliegue con `docker compose` y e
 + Adobe Systems Incorporated (2012). _Adobe's Real Time Messaging Protocol_, versión 1.0. Adobe Systems, San José, EE. UU.
 + Chen, M. (illuspas) (2026). _Node-Media-Server v4_ [repositorio de software]. https://github.com/illuspas/Node-Media-Server
 + FFmpeg Project (2026). _FFmpeg Protocols Documentation — rtmp_. https://ffmpeg.org/ffmpeg-protocols.html\#rtmp
-+ Kurose, J.; Ross, K. (2021). _Computer Networking: A Top-Down Approach_, 8ª edición. Pearson.
++ Kurose, J. y Ross, K. (2021). _Computer Networking: A Top-Down Approach_, 8ª edición. Pearson.
 + Veovera Software Organization (2023). _Enhanced RTMP_ [especificación]. https://github.com/veovera/enhanced-rtmp
 + VideoLAN (2026). _VLC media player_ [repositorio de software]. https://github.com/videolan/vlc
 + Wireshark Foundation (2026). _Wireshark User's Guide_. https://www.wireshark.org/docs/wsug_html_chunked/
@@ -528,6 +528,9 @@ Como fortaleza destaco haber automatizado el despliegue con `docker compose` y e
 #pagebreak()
 
 = Anexo
+
+// Los listados largos (docker-compose.yml) no caben en una página: se permite dividirlos
+#show figure: set block(breakable: true)
 
 #figure(kind: image,
 ```yaml
@@ -606,7 +609,8 @@ networks:
 FROM node:22-alpine
 RUN npm install -g node-media-server@4.4.6
 WORKDIR /opt/nms
-RUN cp "$(npm root -g)/node-media-server/bin/key.pem" "$(npm root -g)/node-media-server/bin/cert.pem" .
+RUN cp "$(npm root -g)/node-media-server/bin/key.pem" \
+       "$(npm root -g)/node-media-server/bin/cert.pem" .
 COPY config.json .
 EXPOSE 1935 1936 8000 8443
 CMD ["node-media-server", "-c", "/opt/nms/config.json"]
@@ -650,12 +654,16 @@ ENTRYPOINT ["cvlc"]
 ```bash
 #!/bin/bash
 # Uso: ./analizar_rtmp.sh captura.pcap
-P="$1"; O=""
+P="$1"
+O=""
 # Wireshark <= 4.2: subir el límite del disector (NMS usa chunk size 65535)
 tshark -G defaultprefs | grep -q rtmpt.max_packet_size && O="-o rtmpt.max_packet_size:2000000"
 # La captura se entrega por tubería: AppArmor impide a tshark abrir archivos directamente
-ts() { cat "$P" | tshark $O -r - "$@" 2>/dev/null; }
-echo "== Conversaciones TCP"; ts -q -z conv,tcp
+ts() {
+  cat "$P" | tshark $O -r - "$@" 2>/dev/null
+}
+echo "== Conversaciones TCP"
+ts -q -z conv,tcp
 echo "== Mensajes RTMP de control (sin audio/video)"
 ts -Y rtmpt -T fields -e frame.number -e frame.time_relative -e ip.src -e tcp.srcport \
    -e ip.dst -e tcp.dstport -e frame.len -e _ws.col.Info \
