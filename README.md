@@ -1,6 +1,6 @@
 # Tarea 2 — Taller de Redes: Protocolo RTMP
 > Despliegue en contenedores Docker de un servidor RTMP (Node-Media-Server) y clientes VLC que publican y reproducen video, con captura y análisis del tráfico generado.
-> Video de la entrega: _(pegar aquí el enlace, ≤ 8 min)_
+> Video de la entrega: https://drive.google.com/file/d/1CuB4renYN_XXiC_4Zf2I5zjX3ak_Ib-_/view?usp=sharing
 
 ## Tabla de contenidos
 * [Información general](#información-general)
@@ -16,12 +16,11 @@
 
 
 ## Información general
-- Trabajo individual (grupo 14 de la asignación de protocolos) del curso Taller de Redes y Servicios (UDP, 2026-2). El protocolo asignado es **RTMP** (_Real-Time Messaging Protocol_).
+- Trabajo Taller de Redes y Servicios. El protocolo asignado es **RTMP** (_Real-Time Messaging Protocol_).
 - El objetivo es instalar una dupla servidor–cliente que use RTMP, ponerla a comunicarse y estudiar el tráfico que genera: el handshake, los comandos AMF0, los mensajes de control y el flujo de audio y video.
 - Toda la experiencia corre en contenedores para que se pueda repetir en cualquier equipo con un solo `docker compose`.
 - Este repositorio es la base de la Tarea 3, donde se modificará el tráfico en tránsito y se medirán sus efectos.
 
-Dupla asignada:
 
 | Rol | Software | Repositorio |
 |---|---|---|
@@ -45,7 +44,6 @@ Arquitectura (red bridge `rtmpnet`, 172.28.0.0/24):
 - tcpdump (imagen `nicolaka/netshoot`)
 - Wireshark / tshark 4.6.4
 - FFmpeg (solo para generar el video de prueba)
-- Typst (informe)
 
 
 ## Funcionalidades
@@ -168,10 +166,8 @@ Pendiente (Tarea 3):
 
 
 ## Agradecimientos
-- Plantilla del README basada en [README-cheatsheet](https://github.com/ritaly/README-cheatsheet) de ritaly.
 - Especificación _Adobe's Real Time Messaging Protocol_ v1.0 (2012).
 - Documentación de [Node-Media-Server](https://github.com/illuspas/Node-Media-Server) y [VLC](https://github.com/videolan/vlc).
 
 
-## Contacto
-Creado por Cristian San Martín ([@csanmartin12](https://github.com/csanmartin12)).
+
