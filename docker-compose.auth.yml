@@ -1,0 +1,8 @@
+# Prueba A: Node-Media-Server con autenticación de publicación y reproducción.
+#   docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d nms
+# Reemplaza la configuración del contenedor por server/config.auth.json
+# (auth.publish = true, auth.play = true, auth.secret = "tallerredes2026").
+services:
+  nms:
+    volumes:
+      - ./server/config.auth.json:/opt/nms/config.json:ro

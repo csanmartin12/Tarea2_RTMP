@@ -9,6 +9,9 @@
 * [Capturas de pantalla](#capturas-de-pantalla)
 * [Instalación](#instalación)
 * [Uso](#uso)
+* [Tipos de tráfico identificados](#tipos-de-tráfico-identificados)
+* [Pruebas de parámetros](#pruebas-de-parámetros)
+* [Seguridad](#seguridad)
 * [Estado del proyecto](#estado-del-proyecto)
 * [Mejoras pendientes](#mejoras-pendientes)
 * [Agradecimientos](#agradecimientos)
@@ -50,6 +53,7 @@ Arquitectura (red bridge `rtmpnet`, 172.28.0.0/24):
 - VLC como **publicador**: remultiplexa un MP4 (H.264 + AAC) a FLV y lo envía por RTMP, sin recodificar.
 - VLC como **reproductor**, con ventana (`player-gui`) o sin ella (`player`, útil para capturas repetibles).
 - **Sniffer** que comparte la interfaz del servidor y guarda todo el tráfico RTMP en `captures/rtmp_docker.pcap`.
+- Pruebas de modificación de parámetros: autenticación con firma, RTMPS y cambio de bitrate (perfil `pruebas`).
 - Script `scripts/analizar_rtmp.sh` que resume una captura con tshark: conversaciones, mensajes de control, tipos de cabecera de chunk, keyframes y cierres.
 
 
@@ -88,13 +92,13 @@ sudo apt install -y wireshark tshark ffmpeg git x11-xserver-utils
 sudo usermod -aG docker $USER      # cerrar sesión y volver a entrar
 
 # Proyecto
-git clone https://github.com/csanmartin12/Tarea_2_Redes.git
-cd Tarea_2_Redes
+git clone https://github.com/csanmartin12/Tarea2_RTMP.git
+cd Tarea2_RTMP
 chmod +x scripts/*.sh
 docker compose build
 ```
 
-Opcional: generar un video de prueba de 3 minutos (el incluido dura 30 s).
+Opcional: regenerar el video de prueba de 3 minutos incluido en `media/`.
 
 ```bash
 ffmpeg -y -f lavfi -i testsrc=size=640x360:rate=25 -f lavfi -i sine=frequency=440:sample_rate=44100 \
@@ -140,14 +144,82 @@ wireshark captures/rtmp_docker.pcap
 
 Estructura del repositorio:
 ```
-docker-compose.yml     servidor, publicador, reproductor y sniffer
-server/                Dockerfile + config.json de Node-Media-Server
+docker-compose.yml     servidor, publicador, reproductor, sniffer y servicios de prueba
+docker-compose.auth.yml  variante del servidor con autenticación (prueba A)
+server/                Dockerfile, config.json y config.auth.json de Node-Media-Server
 vlc/                   Dockerfile de VLC (publicador y reproductor)
 media/muestra.mp4      video de prueba (H.264 640x360 25 fps + AAC 44.1 kHz)
-scripts/               analizar_rtmp.sh, prueba_nativa.sh (sin Docker)
+scripts/               analizar_rtmp.sh, firmar.sh, prueba_nativa.sh (sin Docker)
 captures/              capturas .pcap y resúmenes
 informe/               informe en Typst (main.typ) e imágenes
 ```
+
+
+## Tipos de tráfico identificados
+P = publicador `172.28.0.20:56514`, S = servidor `172.28.0.10:1935`, R = reproductor `172.28.0.30:40932` (tramas de `captures/rtmp_docker.pcap`).
+
+| # | Tipo | Type id | Trama | Origen → Destino |
+|---|---|---|---|---|
+| 1 | Handshake C0+C1 / S0+S1+S2 / C2 | — | 4, 6, 8 | P → S, S → P |
+| 2 | Comando `connect` | 0x14 | 12 | P → S |
+| 3 | Window Acknowledgement Size | 0x05 | 14 | S → P |
+| 4 | Set Peer Bandwidth | 0x06 | 16 | S → P |
+| 5 | Set Chunk Size | 0x01 | 16, 20 | S → P, P → S |
+| 6 | `createStream` / `publish` / `play` / `deleteStream` | 0x14 | 20, 25, 5847, 48165 | P → S, R → S |
+| 7 | Respuestas `_result` / `onStatus` | 0x14 | 22, 27, 5850 | S → P, S → R |
+| 8 | Metadatos `@setDataFrame(onMetaData)` | 0x12 | 30, 5850 | P → S, S → R |
+| 9 | Audio Data (AAC) | 0x08 | 30 en adelante | P → S, S → R |
+| 10 | Video Data (H.264) | 0x09 | 30 en adelante | P → S, S → R |
+| 11 | User Control: Stream Begin / Set Buffer Length | 0x04 | 5849, 5847 | S → R, R → S |
+| 12 | Acknowledgement | 0x03 | 15348 | R → S |
+
+
+## Pruebas de parámetros
+Usan el perfil `pruebas` del `docker-compose.yml`. Para capturar su tráfico (RTMP y RTMPS) en `captures/pruebas.pcap`:
+```bash
+docker compose --profile pruebas up -d sniffer-pruebas
+```
+
+**A. Autenticación con firma (servidor).** `server/config.auth.json` activa `auth.publish`, `auth.play` y el `secret` `tallerredes2026`.
+```bash
+docker compose down
+docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d nms
+docker compose --profile pruebas up publisher-firma      # SIN firma: el servidor la rechaza (Ctrl+C para salir)
+export SIGN=$(./scripts/firmar.sh /live/test)            # firma válida por 1 hora
+docker compose --profile pruebas up publisher-firma      # CON firma: se acepta
+docker compose --profile pruebas up player-firma         # (en otra terminal, mientras se publica)
+docker compose logs nms | grep -E "push|play|authentication"
+```
+
+**B. RTMPS (servidor).** Publica por TLS en el puerto 1936; en Wireshark sólo se ve tráfico cifrado.
+```bash
+docker compose down && docker compose up -d nms
+docker compose --profile pruebas up -d sniffer-pruebas
+docker compose --profile pruebas up publisher-rtmps
+```
+
+**C. Bitrate (cliente).** VLC recodifica a 300 kbit/s de video y 64 kbit/s de audio en lugar de remultiplexar.
+```bash
+docker compose --profile pruebas up publisher-300k
+```
+
+| Prueba | Resultado |
+|---|---|
+| A sin firma | `authentication verification failed` (publicación y reproducción rechazadas) |
+| A con firma | publicación y reproducción aceptadas |
+| B RTMPS | TLS 1.3 (`TLS_AES_256_GCM_SHA384`); la ruta `live/test` no aparece en la captura |
+| C 300k | la subida baja de ≈ 607 a ≈ 221 kbit/s; _keyframe_ cada 10 s en vez de 2 s |
+
+
+## Seguridad
+Con la configuración por defecto el despliegue tiene cinco problemas, analizados en el informe:
+1. RTMP viaja **sin cifrar**: la clave del flujo y los comandos se leen en Wireshark → usar RTMPS (prueba B).
+2. **Sin autenticación** de publicación ni reproducción → activar `auth` (prueba A).
+3. La **firma viaja en claro** y se puede reutilizar mientras no expire → firmas cortas y siempre sobre RTMPS.
+4. **Sin integridad**: un intermediario puede modificar mensajes en tránsito → TLS.
+5. **Denegación de servicio**: el servidor acepta `play` sobre flujos inexistentes y deja la conexión abierta; además el panel web (puerto 8000) usa HTTP y credenciales simples (`admin`/`admin`).
+
+> Las credenciales de `server/config.json` (`admin`/`admin` y el `jwt.secret`) son sólo para este laboratorio. No uses esta configuración en una red real.
 
 
 ## Estado del proyecto
@@ -157,7 +229,7 @@ Proyecto: _en progreso_. Completos los capítulos 1 (Introducción al protocolo)
 ## Mejoras pendientes
 Mejoras:
 - Publicar en bucle para tener una transmisión continua.
-- Probar RTMPS (puerto 1936) y comparar con RTMP sin cifrar.
+- Usar RTMPS y autenticación por defecto en vez de dejarlos como prueba opcional.
 
 Pendiente (Tarea 3):
 - Interceptar y modificar campos RTMP en tránsito (_chunk size_, _type id_, timestamps, comandos AMF0).

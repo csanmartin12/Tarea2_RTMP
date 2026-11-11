@@ -28,6 +28,9 @@
 #show raw.where(block: true): set text(size: 8pt)
 #show raw.where(block: true): it => block(fill: luma(246), inset: 8pt, radius: 3pt, width: 100%, align(left, it))
 
+// Tablas anchas: letra más pequeña y sin justificar
+#let tablita(body) = { set par(justify: false); set text(size: 9pt); body }
+
 // ================================================================
 // ÍNDICES
 // ================================================================
@@ -70,7 +73,7 @@ Para facilitar la comprensión del trabajo se definen los siguientes conceptos c
 - *AMF0*: formato binario con que RTMP serializa los comandos y metadatos.
 - *GOP (_Group of Pictures_)*: secuencia de cuadros de video que comienza con un _keyframe_, el único cuadro que puede decodificarse sin depender de otros.
 
-El informe se organiza en dos capítulos. La @cap-protocolo presenta el marco teórico del protocolo: su origen, sus objetivos, la estructura del _handshake_, la división de mensajes en _chunks_, los mensajes de control y los comandos AMF0, junto con una descripción del tráfico que se espera observar. La @cap-trafico documenta la instalación, la configuración y el uso de los programas, analiza en detalle el tráfico capturado y lo contrasta con lo esperado, y finalmente plantea suposiciones sobre las repercusiones que tendría modificar distintos campos del tráfico en tránsito, lo que servirá de base para el tercer capítulo (Tarea 3).
+El informe se organiza en dos capítulos. La @cap-protocolo presenta el marco teórico del protocolo: su origen, sus objetivos, la estructura del _handshake_, la división de mensajes en _chunks_, los mensajes de control y los comandos AMF0, junto con una descripción del tráfico que se espera observar. La @cap-trafico documenta la instalación, la configuración y el uso de los programas, analiza en detalle el tráfico capturado y lo contrasta con lo esperado, documenta pruebas de modificación de parámetros del servidor y del cliente (autenticación, RTMPS y bitrate), analiza cinco vulnerabilidades del despliegue y finalmente plantea suposiciones sobre las repercusiones que tendría modificar distintos campos del tráfico en tránsito, lo que servirá de base para el tercer capítulo (Tarea 3).
 
 Todos los archivos de configuración, la captura de tráfico y los scripts de análisis están en el repositorio #link("https://github.com/csanmartin12/Tarea2_RTMP")[github.com/csanmartin12/Tarea2_RTMP], y el video con el flujo completo de uso se encuentra en #link("https://drive.google.com/file/d/1CuB4renYN_XXiC_4Zf2I5zjX3ak_Ib-_/view?usp=sharing")[este enlace de Google Drive].
 
@@ -244,6 +247,8 @@ xhost +local:
 docker compose --profile gui up player-gui
 ```
 
+En las primeras ejecuciones el log de VLC mostraba advertencias que no afectan la reproducción, pero que conviene eliminar: errores de D-Bus (el contenedor no tiene bus de sesión), `XDG_RUNTIME_DIR not set`, el intento de usar decodificación por hardware VDPAU y el aviso del inhibidor del protector de pantalla. Se eliminaron definiendo `XDG_RUNTIME_DIR` en la imagen (`vlc/Dockerfile`) y agregando a VLC las opciones `--no-dbus`, `--avcodec-hw=none` y `--no-disable-screensaver` (Anexo).
+
 == Uso de los programas
 
 La secuencia de uso fue:
@@ -296,6 +301,31 @@ Las tramas de las tres conexiones suman el total de la captura:
 $ 29141 + 19033 + 30 = 48204 "tramas" $
 
 La asimetría es la esperada: el publicador sube 14 MB y recibe sólo 872 kB, que son casi exclusivamente ACK de TCP, mientras que el reproductor recibe 11 MB y envía 616 kB. De hecho, la trama más frecuente de la captura mide 66 bytes (22 297 tramas): son ACK de TCP sin carga útil.
+
+=== Tipos de tráfico identificados
+
+La @tab-tipos-trafico resume los doce tipos de tráfico distintos que se identificaron en la captura, con una trama de ejemplo de cada uno y su origen y destino. Para abreviar se usa P = publicador (172.28.0.20:56514), S = servidor (172.28.0.10:1935) y R = reproductor (172.28.0.30:40932). Cada tipo se analiza en detalle en las secciones siguientes.
+
+#figure(kind: table,
+  tablita(table(
+    columns: (auto, 1.5fr, auto, 0.9fr, 1fr, 2.4fr),
+    align: (center + horizon, left + horizon, center + horizon, center + horizon, center + horizon, left + horizon),
+    [*\#*], [*Tipo de tráfico*], [*Type id*], [*Trama*], [*Origen → Destino*], [*Función*],
+    [1], [Handshake C0+C1, S0+S1+S2, C2], [—], [4, 6, 8], [P → S, S → P], [Acuerda la versión 3 del protocolo e intercambia bloques de 1536 bytes antes de cualquier mensaje.],
+    [2], [Comando `connect`], [0x14], [12], [P → S], [Abre la conexión con la aplicación `live` y anuncia el cliente (`flashVer`, `tcUrl`).],
+    [3], [Window Acknowledgement Size], [0x05], [14], [S → P], [Fija en 5 000 000 bytes cada cuánto se debe acusar recibo.],
+    [4], [Set Peer Bandwidth], [0x06], [16], [S → P], [Limita el ancho de banda del otro extremo (5 000 000 B, tipo dinámico).],
+    [5], [Set Chunk Size], [0x01], [16, 20], [S → P, P → S], [Cada extremo sube su tamaño de chunk de 128 a 65 535 bytes.],
+    [6], [Comandos `createStream`, `publish`, `play`, `deleteStream`], [0x14], [20, 25, 5847, 48165], [P → S, R → S], [Crean el flujo lógico, inician la publicación o la reproducción y la terminan.],
+    [7], [Respuestas `_result` y `onStatus`], [0x14], [16, 22, 27, 5850], [S → P, S → R], [Confirman la conexión (`Connect.Success`), entregan el id del flujo e informan `Publish.Start` / `Play.Start`.],
+    [8], [Metadatos (`onMetaData`)], [0x12], [30, 5850], [P → S, S → R], [Describen el video: 640×360, 25 fps, códecs AVC y AAC.],
+    [9], [Audio Data], [0x08], [30 en adelante], [P → S, S → R], [Un cuadro AAC por mensaje, unos 43 por segundo.],
+    [10], [Video Data], [0x09], [30 en adelante], [P → S, S → R], [Un cuadro H.264 por mensaje, 25 por segundo; los _keyframes_ llevan la cabecera `0x17`.],
+    [11], [User Control: Stream Begin, Set Buffer Length], [0x04], [5849, 5847], [S → R, R → S], [Avisa que el flujo 1 comenzó y declara un búfer de 3000 ms en el reproductor.],
+    [12], [Acknowledgement], [0x03], [15348], [R → S], [Acusa recibo de 2 501 012 bytes; se repite cada ≈ 2,5 MB.],
+  )),
+  caption: [Tipos de tráfico identificados en la captura, con trama de ejemplo, origen y destino],
+) <tab-tipos-trafico>
 
 === Establecimiento de la sesión de publicación
 
@@ -475,7 +505,76 @@ El reproductor, en cambio, no recibe ningún aviso de fin de flujo: después de 
 
 Diez segundos después (t = 242,158 s) se volvió a abrir VLC para repetir la prueba, lo que generó una tercera conexión (puerto 47328). Como la publicación ya había terminado, esta conexión permite observar qué hace el servidor ante un `play` sobre un flujo inexistente: completó el handshake y respondió `NetStream.Play.Start` aunque el flujo `/live/test` ya no existía. Es decir, Node-Media-Server no informa `NetStream.Play.StreamNotFound`, sino que deja al reproductor suscrito a la espera de que alguien vuelva a publicar. La captura termina en ese punto, al detenerse los contenedores.
 
-== Suposiciones sobre la modificación del tráfico
+== Modificación de parámetros del servidor y del cliente
+
+Para comprobar cómo responden los programas a cambios de configuración se hicieron tres pruebas adicionales, con las mismas versiones de Node-Media-Server y VLC y un fragmento de 40 s del video de prueba. Sus resultados se resumen en la @tab-parametros; las capturas y los logs del servidor de cada prueba están en la carpeta `captures/pruebas/` del repositorio.
+
+#figure(kind: table,
+  tablita(table(
+    columns: (auto, 1.4fr, 2fr),
+    align: (left + horizon, left + horizon, left + horizon),
+    [*Prueba*], [*Parámetro modificado*], [*Resultado observado*],
+    [A. Autenticación (servidor)], [`auth.publish` y `auth.play` en `true`, con `secret` (`config.auth.json`, @fig-auth)], [Sin firma: publicación y reproducción rechazadas (`authentication verification failed`). Con firma válida: ambas funcionan.],
+    [B. RTMPS (servidor)], [Publicar por RTMPS en el puerto 1936 en vez de RTMP en el 1935], [El tráfico viaja cifrado con TLS 1.3 (`TLS_AES_256_GCM_SHA384`); la ruta del flujo ya no aparece en la captura.],
+    [C. Bitrate (cliente)], [VLC recodifica a 300 kbit/s de video y 64 kbit/s de audio en vez de remultiplexar], [La tasa de subida baja de 607,3 a 220,9 kbit/s y el intervalo entre _keyframes_ pasa de 2 s a 10 s.],
+  )),
+  caption: [Pruebas de modificación de parámetros del servidor y del cliente],
+) <tab-parametros>
+
+=== Prueba A: autenticación con firma
+
+Node-Media-Server valida una firma que el cliente agrega a la URL como `?sign=<expiración>-<hash>`, donde la expiración es un instante Unix y el hash es:
+
+```
+hash = MD5("/live/test-<expiración>-<secret>")
+```
+
+La firma se generó con el script `scripts/firmar.sh` (@fig-firmar, Anexo), con una validez de una hora. Con la autenticación activada:
+
++ *Publicar sin firma:* el log del servidor muestra el error `authentication verification failed`. Sin embargo, en la red responde igual con un `onStatus` de código `Publish.Start` ("/live/test is now published.") y cierra la conexión TCP 1 ms después. VLC no detecta el rechazo: siguió enviando video durante 11,9 s, hasta que se detuvo el proceso.
++ *Publicar con firma:* la publicación se acepta (`start push /live/test`) y se transmite el fragmento completo.
++ *Reproducir sin firma:* el servidor registra el mismo error de autenticación y VLC informa `Input/output error` al abrir la URL; la conexión dura 0,18 s.
++ *Reproducir con firma:* la reproducción funciona normalmente.
+
+Un detalle importante para la seguridad: la firma viaja en texto plano dentro del comando `publish` (en la captura se lee `test?sign=1794361723-972be199…`), por lo que cualquiera que capture el tráfico puede reutilizarla mientras no expire (@sec-vulnerabilidades).
+
+=== Prueba B: RTMPS
+
+Node-Media-Server también escucha RTMP sobre TLS en el puerto 1936 (bloque `rtmps` de la configuración). Al publicar en `rtmps://…:1936/live/test`, la captura muestra el handshake TLS (_Client Hello_ y _Server Hello_ con TLS 1.3 y el cifrado `TLS_AES_256_GCM_SHA384`) y luego sólo registros cifrados: 204 de las 410 tramas son TLS y la cadena `live/test` no aparece ni una vez, mientras que en la captura sin cifrar aparece en claro. Wireshark ya no puede identificar ninguno de los tipos de mensaje de la @tab-tipos-trafico.
+
+=== Prueba C: bitrate del publicador
+
+En lugar de remultiplexar el archivo, VLC lo recodificó con un objetivo de 300 kbit/s para el video y 64 kbit/s para el audio. La tasa media de subida, medida entre los segundos 3 y 36 (34 s), fue:
+
+$ overline(R)_"300k" = frac(938943 "B" times 8, 34 "s") = frac(7511544 "bit", 34 "s") = 220928 "bit/s" approx 220","9 "kbit/s" $
+
+Es decir, un 64 % menos que los 607,3 kbit/s del envío original. La tasa queda bajo el objetivo de 300 + 64 = 364 kbit/s porque el codificador x264 trabaja con tasa variable y el patrón de barras es casi estático. Además aparecen picos de ≈ 280 kbit/s cada 10 s (segundos 9, 19 y 29): VLC recodifica con el intervalo por defecto de x264 de 250 cuadros entre _keyframes_ (250 / 25 fps = 10 s), en vez de los 50 cuadros (2 s) del archivo original.
+
+== Análisis de vulnerabilidades <sec-vulnerabilidades>
+
+A partir de la captura y de la configuración usada se identificaron cinco vulnerabilidades del despliegue. Según Snyk, la versión 4.4.6 de Node-Media-Server no tiene vulnerabilidades conocidas registradas (Snyk, 2026), por lo que las cinco corresponden al diseño del protocolo y a la configuración, no a fallas de programación conocidas. Aun así, el análisis de mensajes RTMP es una superficie de ataque real: en otra implementación del protocolo se reportó un _use-after-free_ que permite una denegación de servicio (CVE-2022-40016, OSV, 2023).
+
+#figure(kind: table,
+  tablita(table(
+    columns: (auto, 1.2fr, 2fr, 1.3fr),
+    align: (center + horizon, left + horizon, left + horizon, left + horizon),
+    [*\#*], [*Vulnerabilidad*], [*Evidencia en este trabajo*], [*Mitigación*],
+    [1], [Tráfico sin cifrar], [La clave del flujo (`test`), la URL y los comandos se leen directamente en Wireshark (@fig-ws-connect).], [Usar RTMPS (puerto 1936, Prueba B).],
+    [2], [Publicación y reproducción sin autenticación], [Con la configuración por defecto (`auth.publish = false`) cualquier equipo de la red puede publicar en `/live/test` o verlo.], [Activar `auth` con un `secret` (Prueba A).],
+    [3], [Firma reutilizable], [La firma de la Prueba A viaja en claro y vale una hora; quien la capture puede publicar con ella. El servidor además responde `Publish.Start` aun cuando rechaza la firma.], [Firmas de corta duración y siempre sobre RTMPS.],
+    [4], [Sin integridad: modificación en tránsito], [Ningún mensaje lleva un código de integridad; un intermediario puede cambiar campos como el _chunk size_ o el _type id_ (@sec-suposiciones).], [TLS (RTMPS), que detecta cualquier alteración.],
+    [5], [Denegación de servicio por conexiones ociosas], [El servidor acepta `play` sobre un flujo inexistente y deja la conexión abierta (tercera conexión de la @tab-conv), y no exige _Acknowledgements_ al publicador.], [Autenticación de `play`, límite de conexiones y tiempos de espera en un _firewall_ o _proxy_.],
+  )),
+  caption: [Vulnerabilidades identificadas, evidencia y mitigación],
+) <tab-vulnerabilidades>
+
++ *Tráfico sin cifrar.* RTMP no cifra nada: en la captura se leen la aplicación (`live`), la clave del flujo (`test`), la versión del cliente y todos los comandos AMF0. En servicios como Twitch o YouTube la clave del flujo es la credencial del canal, por lo que quien la capture puede transmitir en nombre del dueño. La Prueba B mostró que con RTMPS esa información deja de ser visible.
++ *Sin autenticación por defecto.* La configuración por defecto de Node-Media-Server acepta cualquier `publish` y cualquier `play`. Un atacante en la red puede reemplazar la transmisión publicando en la misma ruta o verla sin permiso. La Prueba A mostró que activar `auth` bloquea ambos casos.
++ *Firma reutilizable y respuesta engañosa.* La protección de la Prueba A se apoya en una firma que viaja en texto plano y vale hasta su expiración, por lo que un atacante que capture una publicación puede reutilizarla (ataque de repetición). Además, ante una firma inválida el servidor responde `NetStream.Publish.Start` antes de cerrar la conexión, lo que confunde al cliente: VLC siguió enviando video sin saber que había sido rechazado.
++ *Sin integridad.* Como RTMP no protege la integridad de los mensajes, un intermediario puede modificarlos al vuelo. Las suposiciones de la @sec-suposiciones muestran el efecto: desde desincronizar todo el flujo cambiando el _chunk size_ hasta impedir la decodificación alterando la cabecera de un _keyframe_. TLS detecta cualquier modificación y corta la conexión.
++ *Denegación de servicio.* Se observó que el servidor acepta `play` sobre un flujo que no existe y deja al cliente esperando indefinidamente, y que no exige los acuses de recibo que la especificación prevé. Un atacante puede abrir muchas conexiones de este tipo para consumir memoria y sockets del servidor. A esto se suma que el panel web y la API (puerto 8000) funcionan sobre HTTP sin cifrar y con usuario y contraseña simples (`admin`), por lo que sus credenciales también podrían capturarse.
+
+== Suposiciones sobre la modificación del tráfico <sec-suposiciones>
 
 A continuación se plantean hipótesis sobre qué ocurriría si un intermediario pudiera modificar campos del tráfico al vuelo. Se verificarán en el capítulo de modificación de tráfico (Tarea 3). Como RTMP viaja sobre TCP, se asume que el atacante recalcula los checksums y respeta los números de secuencia. De lo contrario, TCP simplemente descartaría los segmentos y el efecto sería sólo retransmisiones y latencia.
 
@@ -498,6 +597,7 @@ Durante el desarrollo de la tarea, las principales dificultades fueron:
 + *Ejecutar VLC en contenedores*: VLC se niega a correr como _root_, por lo que se creó un usuario sin privilegios en la imagen. Para ver el video en pantalla además hay que compartir el servidor gráfico del host (X11 o WSLg).
 + *Decodificación en Wireshark*: el filtro intuitivo `rtmp` no muestra nada, porque corresponde a otro protocolo. El correcto es `rtmpt`. Además, en Wireshark 4.2 la mayor parte de la captura aparecía como paquetes malformados por el límite de 32 768 bytes del disector, problema que ya no existe en la versión 4.6.
 + *Permisos de las herramientas*: el archivo de captura lo escribe `tcpdump` como _root_ dentro del contenedor, por lo que hubo que cambiar su dueño (`chown`) en el host. Además, el perfil AppArmor de `tshark` en Ubuntu le impedía abrir el archivo directamente, lo que se resolvió entregándole la captura por una tubería (`cat captura | tshark -r -`).
++ *Advertencias de VLC en el contenedor*: el log mostraba errores de D-Bus, `XDG_RUNTIME_DIR` y VDPAU, propios de ejecutar una aplicación gráfica sin escritorio completo. Se eliminaron con la variable `XDG_RUNTIME_DIR` en la imagen y las opciones `--no-dbus`, `--avcodec-hw=none` y `--no-disable-screensaver`.
 + *Audio en el contenedor*: VLC reproducía la imagen pero no el sonido, porque el contenedor no tenía acceso al servidor de audio. Se resolvió compartiendo el socket de PulseAudio del host.
 
 // ================================================================
@@ -509,6 +609,8 @@ Durante el desarrollo de la tarea, las principales dificultades fueron:
 El trabajo permitió observar en una red real cómo RTMP cumple su objetivo de multiplexar audio, video y comandos sobre una única conexión TCP. El tráfico capturado coincidió en lo esencial con lo que describe la especificación de Adobe: un handshake de tamaño fijo (1537 + 3073 + 1536 bytes), una fase de negociación con mensajes de control y comandos AMF0 que dura menos de 200 ms, y luego un flujo periódico de mensajes de audio y video cuya cadencia refleja directamente las propiedades del archivo (25 cuadros de video y unos 43 de audio por segundo, un _keyframe_ cada 2 s).
 
 Las diferencias más interesantes no estaban en la especificación, sino en las implementaciones. Se descubrió que VLC delega toda la lógica RTMP en `libavformat` de FFmpeg, que el servidor y el publicador eligen formatos de cabecera distintos para los mismos datos, que existen comandos "de facto" (`releaseStream`, `FCPublish`, `getStreamLength`) ausentes en la norma, y que Node-Media-Server usa una caché de GOP para que un reproductor nuevo vea imagen en menos de 200 ms (173 ms en la captura). También se comprobó que el mecanismo de _acknowledgement_ propio de RTMP se usa sólo a medias: el reproductor acusa recibo cada 2,5 MB, pero el servidor nunca lo hace hacia el publicador, de modo que el control de flujo efectivo recae en TCP. Finalmente, el reproductor no recibe aviso alguno cuando termina la publicación, y el servidor acepta un `play` sobre un flujo inexistente sin reportar error.
+
+Las pruebas de parámetros y el análisis de vulnerabilidades mostraron el costo de la configuración por defecto: sin autenticación ni cifrado, cualquier equipo de la red puede ver, publicar o reemplazar el flujo, y la firma que agrega la autenticación viaja en claro. Activar `auth` bloqueó los accesos sin firma, RTMPS ocultó por completo el contenido de la sesión y bajar el bitrate del cliente redujo la tasa de 607,3 a 220,9 kbit/s, lo que confirma que el servidor sólo reenvía lo que recibe.
 
 El problema con el disector de Wireshark fue la lección más útil: un único parámetro de _framing_ mal interpretado (el tamaño máximo de chunk) basta para que todo el flujo se lea como basura. Esto anticipa que, de los campos que se modificarán en la Tarea 3, los que afectan la delimitación de mensajes (_chunk size_, `fmt`, largo) tendrán efectos mucho más graves que los que sólo alteran el contenido (marcas de tiempo, datos de audio o video).
 
@@ -522,6 +624,8 @@ Como fortaleza destaco haber automatizado el despliegue con `docker compose` y e
 - CHEN, M. (2026) _Node-Media-Server v4_ [repositorio de software]. https://github.com/illuspas/Node-Media-Server
 - FFMPEG PROJECT (2026) _FFmpeg Protocols Documentation: rtmp_. https://ffmpeg.org/ffmpeg-protocols.html\#rtmp
 - KUROSE, J. y ROSS, K. (2021) _Computer Networking: A Top-Down Approach_, 8.ª edición. Pearson, Hoboken.
+- OSV (2023) _CVE-2022-40016: use-after-free en librtmp de ireader/media-server_. https://osv.dev/vulnerability/CVE-2022-40016
+- SNYK (2026) _node-media-server: vulnerabilidades conocidas_. https://security.snyk.io/package/npm/node-media-server
 - VEOVERA SOFTWARE ORGANIZATION (2023) _Enhanced RTMP_ [especificación]. https://github.com/veovera/enhanced-rtmp
 - VIDEOLAN (2026) _VLC media player_ [repositorio de software]. https://github.com/videolan/vlc
 - WIRESHARK FOUNDATION (2026) _Wireshark User's Guide_. https://www.wireshark.org/docs/wsug_html_chunked/
@@ -560,7 +664,7 @@ services:
     build: ./vlc
     volumes:
       - ./media:/media:ro
-    command: ["-I", "dummy", "/media/muestra.mp4", "--sout",
+    command: ["-I", "dummy", "--no-dbus", "/media/muestra.mp4", "--sout",
               "#std{access=avio,mux=ffmpeg{mux=flv},dst=rtmp://nms:1935/live/test}",
               "vlc://quit"]
     depends_on: [nms]
@@ -571,8 +675,8 @@ services:
   player:                        # VLC reproduce sin ventana
     build: ./vlc
     profiles: ["headless"]
-    command: ["-I", "dummy", "--vout", "dummy", "--aout", "dummy", "-vv",
-              "--run-time", "12", "rtmp://nms:1935/live/test", "vlc://quit"]
+    command: ["-I", "dummy", "--no-dbus", "--avcodec-hw=none", "--vout", "dummy",
+              "--aout", "dummy", "--run-time", "12", "rtmp://nms:1935/live/test", "vlc://quit"]
     depends_on: [nms]
     networks:
       rtmpnet:
@@ -582,7 +686,8 @@ services:
     build: ./vlc
     profiles: ["gui"]
     entrypoint: ["vlc"]
-    command: ["--aout", "pulse", "rtmp://nms:1935/live/test"]
+    command: ["--no-dbus", "--avcodec-hw=none", "--no-disable-screensaver",
+              "--aout", "pulse", "rtmp://nms:1935/live/test"]
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
@@ -594,6 +699,19 @@ services:
       rtmpnet:
         ipv4_address: 172.28.0.30
 
+  # --- Pruebas de parámetros (perfil "pruebas"); se omiten volumes/networks ---
+  sniffer-pruebas:               # captura RTMP (1935) y RTMPS (1936)
+    command: [..., "-w", "/captures/pruebas.pcap", "tcp port 1935 or tcp port 1936"]
+  publisher-firma:               # prueba A: publicar con firma
+    command: [..., "dst=rtmp://nms:1935/live/test?sign=${SIGN}", ...]
+  player-firma:                  # prueba A: reproducir con firma
+    command: [..., "rtmp://nms:1935/live/test?sign=${SIGN}", ...]
+  publisher-rtmps:               # prueba B: RTMP sobre TLS
+    command: [..., "dst=rtmps://nms:1936/live/test", ...]
+  publisher-300k:                # prueba C: recodificar a 300 kbit/s
+    command: [..., "#transcode{vcodec=h264,vb=300,venc=x264{preset=veryfast},
+               acodec=mp4a,ab=64,channels=2,samplerate=44100}:std{...}", ...]
+
 networks:
   rtmpnet:
     driver: bridge
@@ -601,7 +719,7 @@ networks:
       config:
         - subnet: 172.28.0.0/24
 ```,
-  caption: [Archivo `docker-compose.yml`],
+  caption: [Archivo `docker-compose.yml` (los servicios de prueba aparecen resumidos)],
 ) <fig-compose>
 
 #figure(kind: image,
@@ -627,9 +745,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         vlc-bin vlc-plugin-base vlc-plugin-video-output vlc-plugin-qt \
         ca-certificates iproute2 iputils-ping \
     && rm -rf /var/lib/apt/lists/*
-RUN useradd -m -u 1000 vlcuser      # VLC se niega a ejecutarse como root
+RUN useradd -m -u 1000 vlcuser \
+    && mkdir -p /tmp/runtime-vlcuser && chown vlcuser:vlcuser /tmp/runtime-vlcuser \
+    && chmod 700 /tmp/runtime-vlcuser          # VLC se niega a ejecutarse como root
 USER vlcuser
 WORKDIR /home/vlcuser
+ENV XDG_RUNTIME_DIR=/tmp/runtime-vlcuser      # evita el aviso "XDG_RUNTIME_DIR not set"
 ENTRYPOINT ["cvlc"]
 ```,
   caption: [Archivo `vlc/Dockerfile`],
@@ -650,6 +771,31 @@ ENTRYPOINT ["cvlc"]
 ```,
   caption: [Parámetros relevantes de `server/config.json`],
 ) <fig-config>
+
+#figure(kind: image,
+```yaml
+# docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d nms
+services:
+  nms:
+    volumes:
+      - ./server/config.auth.json:/opt/nms/config.json:ro
+# server/config.auth.json cambia sólo el bloque auth:
+#   "auth": { "play": true, "publish": true, "secret": "tallerredes2026", ... }
+```,
+  caption: [Archivo `docker-compose.auth.yml` (prueba A, autenticación)],
+) <fig-auth>
+
+#figure(kind: image,
+```bash
+#!/bin/bash
+# Uso: ./scripts/firmar.sh /live/test [segundos_de_validez] [secret]
+RUTA="${1:-/live/test}"; VALIDEZ="${2:-3600}"; SECRET="${3:-tallerredes2026}"
+EXP=$(( $(date +%s) + VALIDEZ ))
+HASH=$(printf "%s" "$RUTA-$EXP-$SECRET" | md5sum | cut -d' ' -f1)
+echo "$EXP-$HASH"
+```,
+  caption: [Script `firmar.sh`, que genera la firma de la prueba A],
+) <fig-firmar>
 
 #figure(kind: image,
 ```bash

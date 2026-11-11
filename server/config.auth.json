@@ -1,0 +1,51 @@
+{
+    "bind": "0.0.0.0",
+    "notify": {
+        "url": ""
+    },
+    "store": {
+        "path": "./data",
+        "maxHistory": 10000
+    },
+    "auth": {
+        "play": true,
+        "publish": true,
+        "secret": "tallerredes2026",
+        "jwt": {
+            "secret": "085a4a06e72c42412a7772d1773bafdf895d8f8d1afc37b4733e230699d7ff75",
+            "expiresIn": "24h",
+            "refreshExpiresIn": "7d",
+            "algorithm": "HS256",
+            "users": [
+                {
+                    "username": "admin",
+                    "password": "scrypt$16384$8$1$d3bb2d1d017fffe85b1dbb655d6e001d$2cbc066ab1057e43ea29099849b325373291cede4dfcc3190d3a548341c4d853c1ebbaffe72b0f5bb4a7288a1440c00ad8a9ebc759c8b4535da5e6b49fd1e3c3",
+                    "role": "admin"
+                }
+            ]
+        }
+    },
+    "rtmp": {
+        "port": 1935
+    },
+    "rtmps": {
+        "port": 1936,
+        "key": "./key.pem",
+        "cert": "./cert.pem"
+    },
+    "http": {
+        "port": 8000
+    },
+    "https": {
+        "port": 8443,
+        "key": "./key.pem",
+        "cert": "./cert.pem"
+    },
+    "webadmin": {
+        "enable": true
+    },
+    "record": {
+        "auto": false,
+        "path": "./record"
+    }
+}

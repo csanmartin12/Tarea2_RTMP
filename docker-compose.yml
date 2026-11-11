@@ -1,10 +1,21 @@
 # Tarea 2 - Taller de Redes: protocolo RTMP con Node-Media-Server (servidor) y VLC (cliente)
 #
+# Flujo básico
 #   docker compose up -d --build nms sniffer        # servidor + captura de tráfico
 #   docker compose up publisher                     # VLC publica media/muestra.mp4
 #   docker compose --profile headless up player     # VLC reproduce sin ventana
 #   docker compose --profile gui up player-gui      # VLC reproduce con ventana (Linux / WSLg)
 #   docker compose down                             # detiene todo (la captura queda en ./captures)
+#
+# Pruebas de modificación de parámetros (ver README, sección "Pruebas de parámetros")
+#   B) RTMPS:     docker compose --profile pruebas up publisher-rtmps
+#   C) Bitrate:   docker compose --profile pruebas up publisher-300k
+#   A) Firma:     docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d nms
+#                 export SIGN=$(./scripts/firmar.sh /live/test)
+#                 docker compose --profile pruebas up publisher-firma
+
+# --no-dbus, --avcodec-hw=none y --no-disable-screensaver evitan los avisos de VLC
+# propios de correr en un contenedor sin escritorio completo.
 
 services:
   nms:
@@ -37,6 +48,7 @@ services:
     command:
       - "-I"
       - "dummy"
+      - "--no-dbus"
       - "/media/muestra.mp4"
       - "--sout"
       - "#std{access=avio,mux=ffmpeg{mux=flv},dst=rtmp://nms:1935/live/test}"
@@ -51,7 +63,7 @@ services:
     build: ./vlc
     container_name: vlc-player
     profiles: ["headless"]
-    command: ["-I", "dummy", "--vout", "dummy", "--aout", "dummy", "-vv",
+    command: ["-I", "dummy", "--no-dbus", "--avcodec-hw=none", "--vout", "dummy", "--aout", "dummy",
               "--run-time", "12", "rtmp://nms:1935/live/test", "vlc://quit"]
     depends_on: [nms]
     networks:
@@ -65,7 +77,8 @@ services:
     container_name: vlc-player-gui
     profiles: ["gui"]
     entrypoint: ["vlc"]
-    command: ["--aout", "pulse", "rtmp://nms:1935/live/test"]
+    command: ["--no-dbus", "--avcodec-hw=none", "--no-disable-screensaver", "--aout", "pulse",
+              "rtmp://nms:1935/live/test"]
     environment:
       - DISPLAY=${DISPLAY:-:0}
       - PULSE_SERVER=unix:/run/user/1000/pulse/native
@@ -76,6 +89,77 @@ services:
     networks:
       rtmpnet:
         ipv4_address: 172.28.0.30
+
+  # ---------------- Pruebas de modificación de parámetros (perfil "pruebas") ----------------
+
+  # Captura de las pruebas: RTMP (1935) y RTMPS (1936)
+  sniffer-pruebas:
+    image: nicolaka/netshoot
+    container_name: sniffer-pruebas
+    profiles: ["pruebas"]
+    network_mode: "service:nms"
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ./captures:/captures
+    command: ["tcpdump", "-i", "eth0", "-s", "0", "-U", "-Z", "root", "-w", "/captures/pruebas.pcap",
+              "tcp port 1935 or tcp port 1936"]
+    depends_on: [nms]
+
+  # Prueba A (servidor): publicar con firma cuando nms usa server/config.auth.json
+  publisher-firma:
+    build: ./vlc
+    container_name: vlc-publisher-firma
+    profiles: ["pruebas"]
+    volumes:
+      - ./media:/media:ro
+    command: ["-I", "dummy", "--no-dbus", "/media/muestra.mp4", "--sout",
+              "#std{access=avio,mux=ffmpeg{mux=flv},dst=rtmp://nms:1935/live/test?sign=${SIGN:-sin-firma}}",
+              "vlc://quit"]
+    depends_on: [nms]
+    networks:
+      rtmpnet:
+        ipv4_address: 172.28.0.21
+
+  # Prueba A (servidor): reproducir con firma
+  player-firma:
+    build: ./vlc
+    container_name: vlc-player-firma
+    profiles: ["pruebas"]
+    command: ["-I", "dummy", "--no-dbus", "--avcodec-hw=none", "--vout", "dummy", "--aout", "dummy",
+              "--run-time", "12", "rtmp://nms:1935/live/test?sign=${SIGN:-sin-firma}", "vlc://quit"]
+    depends_on: [nms]
+    networks:
+      rtmpnet:
+        ipv4_address: 172.28.0.31
+
+  # Prueba B (servidor): publicar por RTMPS (TLS) en el puerto 1936
+  publisher-rtmps:
+    build: ./vlc
+    container_name: vlc-publisher-rtmps
+    profiles: ["pruebas"]
+    volumes:
+      - ./media:/media:ro
+    command: ["-I", "dummy", "--no-dbus", "/media/muestra.mp4", "--run-time", "30", "--sout",
+              "#std{access=avio,mux=ffmpeg{mux=flv},dst=rtmps://nms:1936/live/test}", "vlc://quit"]
+    depends_on: [nms]
+    networks:
+      rtmpnet:
+        ipv4_address: 172.28.0.22
+
+  # Prueba C (cliente): recodificar a 300 kbit/s de video y 64 kbit/s de audio
+  publisher-300k:
+    build: ./vlc
+    container_name: vlc-publisher-300k
+    profiles: ["pruebas"]
+    volumes:
+      - ./media:/media:ro
+    command: ["-I", "dummy", "--no-dbus", "/media/muestra.mp4", "--run-time", "40", "--sout",
+              "#transcode{vcodec=h264,vb=300,venc=x264{preset=veryfast},acodec=mp4a,ab=64,channels=2,samplerate=44100}:std{access=avio,mux=ffmpeg{mux=flv},dst=rtmp://nms:1935/live/test}",
+              "vlc://quit"]
+    depends_on: [nms]
+    networks:
+      rtmpnet:
+        ipv4_address: 172.28.0.23
 
 networks:
   rtmpnet:

@@ -1,0 +1,27 @@
+🔒 Security: Upgrading password storage for user admin to scrypt hash
+✅ Config updated
+[11/10/2026, 9:48:39 PM] [INFO] Node-Media-Server v4.4.6
+[11/10/2026, 9:48:39 PM] [INFO] Homepage: https://github.com/illuspas/Node-Media-Server
+[11/10/2026, 9:48:39 PM] [INFO] License: Apache-2.0
+[11/10/2026, 9:48:39 PM] [INFO] Author: Chen Mingliang
+[11/10/2026, 9:48:39 PM] [INFO] API service has been activated.
+[11/10/2026, 9:48:39 PM] [INFO] WebSocket server listening on port 0.0.0.0:8000
+[11/10/2026, 9:48:39 PM] [INFO] HTTP server listening on port 0.0.0.0:8000
+[11/10/2026, 9:48:39 PM] [INFO] WebSocket server listening on port 0.0.0.0:8443
+[11/10/2026, 9:48:39 PM] [INFO] HTTPS server listening on port 0.0.0.0:8443
+[11/10/2026, 9:48:39 PM] [INFO] Rtmp Server listening on port 0.0.0.0:1935
+[11/10/2026, 9:48:39 PM] [INFO] Rtmps Server listening on port 0.0.0.0:1936
+[11/10/2026, 9:48:39 PM] [INFO] Record server start on the path /tmp/claude-0/exp/record
+[11/10/2026, 9:48:39 PM] [INFO] Auto record disabled, recording only via the manual record API
+[11/10/2026, 9:48:39 PM] [INFO] NodeRelayServer started (API-driven mode)
+[11/10/2026, 9:48:39 PM] [INFO] History server started (max 10000 publish records)
+[11/10/2026, 9:48:39 PM] [INFO] Store ready at /tmp/claude-0/exp/data
+[11/10/2026, 9:48:43 PM] [ERROR] RTMP session mwbehwz1dbxzcfub 127.0.0.1:50826 push /live/test error, publish stream /live/test authentication verification failed
+[11/10/2026, 9:48:55 PM] [INFO] RTMP session mwbehwz1dbxzcfub close
+[11/10/2026, 9:48:57 PM] [INFO] RTMP session mwbei7pnqjo92y84 127.0.0.1:56918 start push /live/test
+[11/10/2026, 9:49:02 PM] [ERROR] RTMP session mwbeibkcjbodled2 127.0.0.1:56924 play /live/test error, play stream /live/test authentication verification failed
+[11/10/2026, 9:49:02 PM] [INFO] RTMP session mwbeibkcjbodled2 close
+[11/10/2026, 9:49:02 PM] [INFO] RTMP session mwbeibq90lygkwvk 127.0.0.1:56936 start play /live/test
+[11/10/2026, 9:49:10 PM] [INFO] RTMP session mwbeibq90lygkwvk socket error, Error: read ECONNRESET
+[11/10/2026, 9:49:10 PM] [INFO] RTMP session mwbeibq90lygkwvk close
+[11/10/2026, 9:49:36 PM] [INFO] RTMP session mwbei7pnqjo92y84 close
